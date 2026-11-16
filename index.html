@@ -15,6 +15,7 @@ body{margin:0;height:100%;box-sizing:border-box;padding:8px 10px;display:flex;fl
 #controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:8px}
 button,select,label.btn{font-size:18px;padding:12px 10px;border:0;border-radius:12px;background:var(--btn);color:var(--btnfg);font-family:inherit;width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center}
 select{background:var(--box);color:var(--fg)}
+#note{height:40px;line-height:20px;font-size:15px;opacity:.8;overflow:hidden;margin-bottom:4px}
 #stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
 #hint{width:100%;height:100%;box-sizing:border-box;border:3px dashed var(--dash);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;cursor:pointer;background:var(--box)}
 #hint b{font-size:32px;line-height:1.2}
@@ -31,11 +32,13 @@ select{background:var(--box);color:var(--fg)}
 #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:50}
 </style></head><body>
 <div id="controls">
-  <label class="btn">Choose photo<input id="file" type="file" accept="image/*" hidden></label>
+  <label class="btn">📷 Use my own photo<input id="file" type="file" accept="image/*" hidden></label>
   <select id="size"><option value="3">Easy (3 wide)</option><option value="4">Medium (4 wide)</option><option value="5">Hard (5 wide)</option></select>
   <button id="start">Start</button>
   <button id="mute">Sound: on</button>
+  <button id="nums" style="display:none">Numbers picture</button>
 </div>
+<div id="note"></div>
 <div id="stage">
   <label id="hint" for="file"><b>📷 Tap here to choose a photo</b><span>It turns into a sliding puzzle.<br>Tap a piece next to the gap to slide it.</span></label>
   <div id="game"><div id="ref"><img id="refimg" alt="Goal photo"><em>Goal</em></div><div id="box"></div></div>
@@ -48,12 +51,51 @@ const $=id=>document.getElementById(id), box=$('box');
 let img=null, url='', cols=3, rows=3, W=0, H=0, pw=0, ph=0, total=0;
 let tiles=[], els=[], started=false, moves=0, t0=0, timer=null, sound=true, ac=null, lastCorrect=0;
 
+let userPhoto='', showNumbers=true, numUrl='';
+
+// the ready-made "easy" picture: 3x3 numbered, colour-coded squares
+function makeNumbers(){
+  const S=1200, t=S/3, c=document.createElement('canvas'); c.width=c.height=S;
+  const x=c.getContext('2d');
+  x.font='bold 340px system-ui,sans-serif'; x.textAlign='center'; x.textBaseline='middle';
+  x.lineJoin='round'; x.lineWidth=30; x.strokeStyle='#000'; x.fillStyle='#fff';
+  for(let k=1;k<=9;k++){
+    const r=Math.floor((k-1)/3), q=(k-1)%3, h=(k-1)/9*0.85*360;
+    x.fillStyle='hsl('+h+',88%,59%)'; x.fillRect(q*t,r*t,t,t);
+    x.fillStyle='#fff';
+    x.strokeText(k,q*t+t/2,r*t+t/2+10); x.fillText(k,q*t+t/2,r*t+t/2+10);
+  }
+  numUrl=c.toDataURL('image/png');
+}
+
+function showHint(){
+  clearInterval(timer); started=false; img=null;
+  $('hint').style.display='flex'; $('game').style.display='none';
+  $('status').className=''; setStatus(''); $('stats').textContent='';
+}
+
+// decide which picture to play with, then build the puzzle
+function applySource(){
+  const useNum = cols===3 && (showNumbers || !userPhoto);
+  const src = useNum ? numUrl : userPhoto;
+  $('nums').style.display = (cols===3 && userPhoto && !showNumbers) ? 'flex' : 'none';
+  $('note').textContent = !src ? '' : useNum
+    ? 'Playing with the numbers picture. Tap “📷 Use my own photo” to play with yours.'
+    : 'Playing with your photo. Tap “📷 Use my own photo” any time to pick another.';
+  if(!src){ showHint(); return; }
+  const im=new Image();
+  im.onload=()=>{ img=im; url=src; build(false); };
+  im.src=src;
+}
+
 $('file').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
-  url=URL.createObjectURL(f);
-  img=new Image(); img.onload=()=>build(false); img.src=url;
+  userPhoto=URL.createObjectURL(f); showNumbers=false;
+  e.target.value='';
+  applySource();
 };
-$('size').onchange=e=>{cols=+e.target.value; build(false);};
+$('size').onchange=e=>{cols=+e.target.value; applySource();};
+$('nums').onclick=()=>{ showNumbers=true; applySource(); };
 $('start').onclick=start;
 $('mute').onclick=()=>{sound=!sound; $('mute').textContent='Sound: '+(sound?'on':'off');};
 
@@ -199,5 +241,6 @@ box.addEventListener('pointerdown',ev=>{
   }
   lastCorrect=correct;
 });
+makeNumbers(); applySource();
 if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js'); }catch(e){} }
 </script></body></html>
